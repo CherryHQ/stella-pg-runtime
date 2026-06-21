@@ -82,7 +82,7 @@ SQL
 "$PREFIX/bin/pg_ctl" -D "$DATA" stop -m fast -w >/dev/null
 
 ARCHIVE="stella-pg-runtime-pg$POSTGRES_LABEL-pgvector$PGVECTOR_LABEL-pgsearch$PG_SEARCH_VERSION-darwin-arm64-postgresapp.tar.zst"
-tar --zstd -cf "$OUT_DIR/$ARCHIVE" -C "$ROOT" .
+tar --zstd -cf "$OUT_DIR/$ARCHIVE" -C "$ROOT" postgres extensions LICENSES manifest.json
 (
   cd "$OUT_DIR"
   shasum -a 256 "$ARCHIVE" > "$ARCHIVE.sha256"
