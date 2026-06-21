@@ -3,7 +3,7 @@
 Release assets are named:
 
 ```text
-stella-pg-runtime-<version>-<goos>-<goarch>.tar.zst
+stella-pg-runtime-<version>-<goos>-<goarch>-<source>.tar.zst
 stella-pg-runtime-<version>-checksums.txt
 stella-pg-runtime-<version>-manifest.json
 ```

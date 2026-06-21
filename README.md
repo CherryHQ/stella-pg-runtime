@@ -6,11 +6,11 @@ This repository builds and publishes per-platform PostgreSQL runtime archives th
 
 ## Bundle contents
 
-Current target stack:
+Current macOS target stack:
 
-- PostgreSQL 18.3
-- pgvector 0.8.3
-- pg_search 0.24.1
+- PostgreSQL 18.4 from Postgres.app 2.9.5
+- pgvector 0.8.2 from Postgres.app
+- pg_search 0.24.1 from ParadeDB release packages
 
 Bundle layout:
 
@@ -28,7 +28,7 @@ manifest.json
 
 ## Why this repo exists
 
-PostgreSQL and native extensions must be built on native runners with matching `pg_config`. Stella should not rebuild PostgreSQL inside its normal CI, and the Stella source repository should not carry large runtime blobs.
+PostgreSQL and native extensions are assembled from upstream native packages, normalized into Stella's bundle layout, smoke-tested, and published as release assets. Stella should not rebuild PostgreSQL inside its normal CI, and the Stella source repository should not carry large runtime blobs.
 
 ## Licensing warning
 
