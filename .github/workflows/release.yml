@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag, e.g. pg18.3.0-pgvector0.8.3-pgsearch0.24.1
+        description: Release tag, e.g. pg18.4-pgvector0.8.2-pgsearch0.24.1
         required: true
         type: string
 
@@ -25,8 +25,52 @@ jobs:
           name: darwin-arm64
           path: dist/*
 
+  linux-deb:
+    name: linux-${{ matrix.arch }}-${{ matrix.distro }}
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: bookworm
+            image: debian:bookworm
+            arch: amd64
+            runner: ubuntu-24.04
+          - distro: bookworm
+            image: debian:bookworm
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - distro: noble
+            image: ubuntu:noble
+            arch: amd64
+            runner: ubuntu-24.04
+          - distro: noble
+            image: ubuntu:noble
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - distro: trixie
+            image: debian:trixie
+            arch: amd64
+            runner: ubuntu-24.04
+          - distro: trixie
+            image: debian:trixie
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build bundle
+        env:
+          DISTRO: ${{ matrix.distro }}
+        run: scripts/build-linux-deb.sh
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}-${{ matrix.distro }}
+          path: dist/*
+
   publish:
-    needs: [darwin-arm64]
+    needs: [darwin-arm64, linux-deb]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
