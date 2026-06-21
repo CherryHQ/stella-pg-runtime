@@ -9,9 +9,18 @@ PG_SEARCH_VERSION="${PG_SEARCH_VERSION:-0.24.1}"
 OUT_DIR="${OUT_DIR:-$PWD/dist}"
 WORK_DIR="${WORK_DIR:-$(mktemp -d)}"
 ROOT="$WORK_DIR/root"
+# PGDG compiles fixed absolute paths (bindir=/usr/lib/postgresql/<major>/bin,
+# datadir=/usr/share/postgresql/<major>); the postgres backend only finds its
+# share dir (timezonesets, bki) at runtime by relocating those paths relative to
+# its own executable. Relocation needs the compiled bindir<->sharedir suffixes
+# preserved, so the bundle mirrors /usr under $PREFIX instead of flattening to
+# postgres/bin + postgres/share. A flat layout makes the backend fall back to the
+# absolute /usr path, which does not exist on the host (see issue: timezonesets).
 PREFIX="$ROOT/postgres"
-PG_LIB="$PREFIX/lib/postgresql"
-PG_SHARE="$PREFIX/share/postgresql"
+PG_HOME="$PREFIX/lib/postgresql/$POSTGRES_MAJOR"
+PG_BIN="$PG_HOME/bin"
+PG_LIB="$PG_HOME/lib"
+PG_SHARE="$PREFIX/share/postgresql/$POSTGRES_MAJOR"
 EXT_LIB="$ROOT/extensions/lib"
 EXT_SHARE="$ROOT/extensions/share/extension"
 RUNTIME_LIB="$PREFIX/lib/runtime"
@@ -46,8 +55,8 @@ echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] h
 apt-get update
 apt-get install -y --no-install-recommends "postgresql-$POSTGRES_MAJOR" "postgresql-client-$POSTGRES_MAJOR" "postgresql-$POSTGRES_MAJOR-pgvector"
 
-mkdir -p "$PG_LIB" "$PG_SHARE" "$EXT_LIB" "$EXT_SHARE" "$RUNTIME_LIB" "$ROOT/LICENSES" "$OUT_DIR"
-cp -a "/usr/lib/postgresql/$POSTGRES_MAJOR/bin" "$PREFIX/"
+mkdir -p "$PG_BIN" "$PG_LIB" "$PG_SHARE" "$EXT_LIB" "$EXT_SHARE" "$RUNTIME_LIB" "$ROOT/LICENSES" "$OUT_DIR"
+cp -a "/usr/lib/postgresql/$POSTGRES_MAJOR/bin/." "$PG_BIN/"
 cp -a "/usr/lib/postgresql/$POSTGRES_MAJOR/lib/." "$PG_LIB/"
 cp -a "/usr/share/postgresql/$POSTGRES_MAJOR/." "$PG_SHARE/"
 cp -a /usr/share/doc/postgresql-common/copyright "$ROOT/LICENSES/postgresql-common-copyright" 2>/dev/null || true
@@ -65,16 +74,10 @@ cp -a "$WORK_DIR/pg_search/usr/share/doc"/*/copyright "$ROOT/LICENSES/pg_search-
 cp "$PG_LIB/vector.so" "$EXT_LIB/"
 cp "$PG_SHARE/extension"/vector* "$EXT_SHARE/"
 
-mv "$PREFIX/bin/initdb" "$PREFIX/bin/initdb.real"
-cat > "$PREFIX/bin/initdb" <<'WRAPPER'
-#!/usr/bin/env bash
-set -euo pipefail
-BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
-exec "$BIN_DIR/initdb.real" "$@" \
-  -L "$BIN_DIR/../share/postgresql" \
-  -c "dynamic_library_path=$BIN_DIR/../lib/postgresql"
-WRAPPER
-chmod 0755 "$PREFIX/bin/initdb"
+# No initdb wrapper: the /usr-mirrored layout lets every binary (initdb and the
+# postgres backend it spawns) relocate its own share/lib dirs, so the old
+# -L/dynamic_library_path wrapper is both unnecessary and would point at the
+# wrong paths under the new bin location.
 
 collect_deps() {
   local file="$1"
@@ -92,23 +95,28 @@ while IFS= read -r file; do
         ;;
     esac
   done < <(collect_deps "$file")
-done < <(find "$PREFIX/bin" "$PG_LIB" "$EXT_LIB" -type f \( -perm -111 -o -name '*.so' \))
+done < <(find "$PG_BIN" "$PG_LIB" "$EXT_LIB" -type f \( -perm -111 -o -name '*.so' \))
 
+# rpath origins below are relative to each binary's new location:
+#   bin    = postgres/lib/postgresql/<major>/bin
+#   pkglib = postgres/lib/postgresql/<major>/lib
+#   runtime= postgres/lib/runtime
+#   ext    = extensions/lib
 while IFS= read -r exe; do
   if file "$exe" | grep -q 'ELF'; then
-    patchelf --set-rpath '$ORIGIN/../lib/runtime:$ORIGIN/../lib/postgresql' "$exe" 2>/dev/null || true
+    patchelf --set-rpath '$ORIGIN/../lib:$ORIGIN/../../../runtime' "$exe" 2>/dev/null || true
   fi
-done < <(find "$PREFIX/bin" -type f -perm -111)
+done < <(find "$PG_BIN" -type f -perm -111)
 
 while IFS= read -r lib; do
   if file "$lib" | grep -q 'ELF'; then
-    patchelf --set-rpath '$ORIGIN:$ORIGIN/../runtime' "$lib" 2>/dev/null || true
+    patchelf --set-rpath '$ORIGIN:$ORIGIN/../../../runtime' "$lib" 2>/dev/null || true
   fi
 done < <(find "$PG_LIB" -type f -name '*.so')
 
 while IFS= read -r lib; do
   if file "$lib" | grep -q 'ELF'; then
-    patchelf --set-rpath '$ORIGIN:$ORIGIN/../../postgres/lib/runtime:$ORIGIN/../../postgres/lib/postgresql' "$lib" 2>/dev/null || true
+    patchelf --set-rpath "\$ORIGIN:\$ORIGIN/../../postgres/lib/runtime:\$ORIGIN/../../postgres/lib/postgresql/$POSTGRES_MAJOR/lib" "$lib" 2>/dev/null || true
   fi
 done < <(find "$EXT_LIB" -type f -name '*.so')
 
@@ -134,19 +142,19 @@ PORT="${SMOKE_PORT:-55432}"
 install -d -o postgres -g postgres "$DATA"
 touch "$SMOKE_LOG"
 chown postgres:postgres "$SMOKE_LOG"
-runuser -u postgres -- "$PREFIX/bin/initdb" -D "$DATA" --no-locale --encoding=UTF8 >/dev/null
-runuser -u postgres -- "$PREFIX/bin/pg_ctl" -D "$DATA" -l "$SMOKE_LOG" -o "-p $PORT -c extension_control_path='$ROOT/extensions/share:$PG_SHARE:\$system' -c dynamic_library_path='$EXT_LIB:$PG_LIB' -c shared_preload_libraries='pg_search'" start -w >/dev/null
+runuser -u postgres -- "$PG_BIN/initdb" -D "$DATA" --no-locale --encoding=UTF8 >/dev/null
+runuser -u postgres -- "$PG_BIN/pg_ctl" -D "$DATA" -l "$SMOKE_LOG" -o "-p $PORT -c extension_control_path='$ROOT/extensions/share:$PG_SHARE:\$system' -c dynamic_library_path='$EXT_LIB:$PG_LIB' -c shared_preload_libraries='pg_search'" start -w >/dev/null
 cleanup() {
-  runuser -u postgres -- "$PREFIX/bin/pg_ctl" -D "$DATA" stop -m fast -w >/dev/null 2>&1 || true
+  runuser -u postgres -- "$PG_BIN/pg_ctl" -D "$DATA" stop -m fast -w >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
-runuser -u postgres -- "$PREFIX/bin/psql" -p "$PORT" -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+runuser -u postgres -- "$PG_BIN/psql" -p "$PORT" -d postgres -v ON_ERROR_STOP=1 <<'SQL'
 SELECT name, default_version FROM pg_available_extensions WHERE name IN ('pg_search','vector') ORDER BY name;
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_search;
 SELECT extname, extversion FROM pg_extension WHERE extname IN ('pg_search','vector') ORDER BY extname;
 SQL
-runuser -u postgres -- "$PREFIX/bin/pg_ctl" -D "$DATA" stop -m fast -w >/dev/null
+runuser -u postgres -- "$PG_BIN/pg_ctl" -D "$DATA" stop -m fast -w >/dev/null
 
 ARCHIVE="stella-pg-runtime-pg${POSTGRES_LABEL}-pgvector${PGVECTOR_LABEL}-pgsearch${PG_SEARCH_VERSION}-linux-${GOARCH}-${DISTRO}.tar.zst"
 tar --zstd -cf "$OUT_DIR/$ARCHIVE" -C "$ROOT" postgres extensions LICENSES manifest.json
