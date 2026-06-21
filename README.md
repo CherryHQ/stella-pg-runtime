@@ -8,7 +8,7 @@ This repository builds and publishes per-platform PostgreSQL runtime archives th
 
 Current target stack:
 
-- PostgreSQL 18.3.0
+- PostgreSQL 18.3
 - pgvector 0.8.3
 - pg_search 0.24.1
 

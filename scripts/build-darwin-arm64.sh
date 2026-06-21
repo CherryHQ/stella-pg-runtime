@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PG_VERSION="${PG_VERSION:-18.3.0}"
+PG_VERSION="${PG_VERSION:-18.3}"
+PG_LABEL="${PG_LABEL:-18.3.0}"
 PGVECTOR_VERSION="${PGVECTOR_VERSION:-0.8.3}"
 PG_SEARCH_VERSION="${PG_SEARCH_VERSION:-0.24.1}"
 OUT_DIR="${OUT_DIR:-$PWD/dist}"
@@ -64,7 +65,7 @@ cat > "$ROOT/manifest.json" <<JSON
 }
 JSON
 
-ARCHIVE="stella-pg-runtime-pg$PG_VERSION-pgvector$PGVECTOR_VERSION-pgsearch$PG_SEARCH_VERSION-darwin-arm64.tar.zst"
+ARCHIVE="stella-pg-runtime-pg$PG_LABEL-pgvector$PGVECTOR_VERSION-pgsearch$PG_SEARCH_VERSION-darwin-arm64.tar.zst"
 tar --zstd -cf "$OUT_DIR/$ARCHIVE" -C "$ROOT" .
 shasum -a 256 "$OUT_DIR/$ARCHIVE" > "$OUT_DIR/$ARCHIVE.sha256"
 echo "$OUT_DIR/$ARCHIVE"
