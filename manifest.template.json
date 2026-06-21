@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "name": "stella-pg-runtime",
+  "version": "pg18.3.0-pgvector0.8.3-pgsearch0.24.1",
+  "postgres": "18.3.0",
+  "pgvector": "0.8.3",
+  "pg_search": "0.24.1",
+  "license_warning": "pg_search is AGPL-3.0; distribution is an explicit product/legal decision.",
+  "artifacts": []
+}

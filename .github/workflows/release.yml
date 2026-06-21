@@ -1,0 +1,49 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, e.g. pg18.3.0-pgvector0.8.3-pgsearch0.24.1
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  darwin-arm64:
+    name: darwin-arm64
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build bundle
+        run: scripts/build-darwin-arm64.sh
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: darwin-arm64
+          path: dist/*
+
+  publish:
+    needs: [darwin-arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum *.tar.zst > checksums.txt
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: ${{ inputs.tag }}
+          files: |
+            dist/*.tar.zst
+            dist/*.sha256
+            dist/checksums.txt
