@@ -83,5 +83,8 @@ SQL
 
 ARCHIVE="stella-pg-runtime-pg$POSTGRES_LABEL-pgvector$PGVECTOR_LABEL-pgsearch$PG_SEARCH_VERSION-darwin-arm64-postgresapp.tar.zst"
 tar --zstd -cf "$OUT_DIR/$ARCHIVE" -C "$ROOT" .
-shasum -a 256 "$OUT_DIR/$ARCHIVE" > "$OUT_DIR/$ARCHIVE.sha256"
+(
+  cd "$OUT_DIR"
+  shasum -a 256 "$ARCHIVE" > "$ARCHIVE.sha256"
+)
 echo "$OUT_DIR/$ARCHIVE"
