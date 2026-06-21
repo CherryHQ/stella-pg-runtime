@@ -12,7 +12,8 @@ WORK_DIR="${WORK_DIR:-$(mktemp -d)}"
 ROOT="$WORK_DIR/root"
 PREFIX="$ROOT/postgres"
 EXT_LIB="$ROOT/extensions/lib"
-EXT_SHARE="$ROOT/extensions/share/extension"
+EXT_SHARE_ROOT="$ROOT/extensions/share"
+EXT_SHARE="$EXT_SHARE_ROOT/extension"
 
 if [[ "$(uname -s)" != "Darwin" || "$(uname -m)" != "arm64" ]]; then
   echo "this script must run natively on darwin/arm64" >&2
@@ -66,7 +67,7 @@ JSON
 DATA="$WORK_DIR/smoke-data"
 PORT="${SMOKE_PORT:-55432}"
 "$PREFIX/bin/initdb" -D "$DATA" --no-locale --encoding=UTF8 >/dev/null
-"$PREFIX/bin/pg_ctl" -D "$DATA" -l "$WORK_DIR/smoke.log" -o "-p $PORT -c extension_control_path='$EXT_SHARE:$PREFIX/share/postgresql:\$system' -c dynamic_library_path='$EXT_LIB:$PREFIX/lib/postgresql' -c shared_preload_libraries='pg_search'" start -w >/dev/null
+"$PREFIX/bin/pg_ctl" -D "$DATA" -l "$WORK_DIR/smoke.log" -o "-p $PORT -c extension_control_path='$EXT_SHARE_ROOT:$PREFIX/share/postgresql:\$system' -c dynamic_library_path='$EXT_LIB:$PREFIX/lib/postgresql' -c shared_preload_libraries='pg_search'" start -w >/dev/null
 cleanup() {
   "$PREFIX/bin/pg_ctl" -D "$DATA" stop -m fast -w >/dev/null 2>&1 || true
   hdiutil detach "$MOUNT_DIR" -quiet >/dev/null 2>&1 || true

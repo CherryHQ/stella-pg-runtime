@@ -17,7 +17,6 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - name: Build bundle
         run: scripts/build-darwin-arm64.sh
       - name: Upload artifact
