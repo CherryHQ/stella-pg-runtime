@@ -25,35 +25,90 @@ EXT_LIB="$ROOT/extensions/lib"
 EXT_SHARE="$ROOT/extensions/share/extension"
 RUNTIME_LIB="$PREFIX/lib/runtime"
 
-if [[ "$(uname -s)" != "Linux" ]]; then
-  echo "this script must run on Linux" >&2
-  exit 1
-fi
+pg_search_deb_name() {
+  printf 'postgresql-%s-pg-search_%s-1PARADEDB-%s_%s.deb' "$POSTGRES_MAJOR" "$PG_SEARCH_VERSION" "$DISTRO" "$PARADE_ARCH"
+}
 
-if [[ "$(id -u)" -ne 0 ]]; then
-  echo "this script must run as root inside a disposable build container" >&2
-  exit 1
-fi
+pg_search_deb_url() {
+  printf 'https://github.com/paradedb/paradedb/releases/download/v%s/%s' "$PG_SEARCH_VERSION" "$(pg_search_deb_name)"
+}
 
-case "$(dpkg --print-architecture)" in
-  amd64) GOARCH="amd64"; PARADE_ARCH="amd64" ;;
-  arm64) GOARCH="arm64"; PARADE_ARCH="arm64" ;;
-  *) echo "unsupported Debian architecture: $(dpkg --print-architecture)" >&2; exit 1 ;;
-esac
+pg_search_deb_available() {
+  curl -fsSIL -o /dev/null "$(pg_search_deb_url)"
+}
 
-case "$DISTRO" in
-  bookworm|trixie|noble) ;;
-  *) echo "unsupported distro: $DISTRO" >&2; exit 1 ;;
-esac
+install_pg_search_from_deb() {
+  local deb
+  deb="$(pg_search_deb_name)"
+  curl -fsSLo "$WORK_DIR/$deb" "$(pg_search_deb_url)"
+  dpkg-deb -x "$WORK_DIR/$deb" "$WORK_DIR/pg_search"
+  cp "$WORK_DIR/pg_search/usr/lib/postgresql/$POSTGRES_MAJOR/lib/pg_search.so" "$EXT_LIB/"
+  cp "$WORK_DIR/pg_search/usr/share/postgresql/$POSTGRES_MAJOR/extension"/pg_search* "$EXT_SHARE/"
+  cp -a "$WORK_DIR/pg_search/usr/share/doc"/*/copyright "$ROOT/LICENSES/pg_search-copyright" 2>/dev/null || true
+}
 
-export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y --no-install-recommends ca-certificates curl gnupg lsb-release patchelf zstd file xz-utils
-install -d /usr/share/postgresql-common/pgdg
-curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
-echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${DISTRO}-pgdg main" > /etc/apt/sources.list.d/pgdg.list
-apt-get update
-apt-get install -y --no-install-recommends "postgresql-$POSTGRES_MAJOR" "postgresql-client-$POSTGRES_MAJOR" "postgresql-$POSTGRES_MAJOR-pgvector"
+install_rust_toolchain() {
+  export PATH="${CARGO_HOME:-/root/.cargo}/bin:$PATH"
+  if command -v cargo >/dev/null 2>&1; then
+    return
+  fi
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+}
+
+install_pg_search_from_source() {
+  local source_dir="$WORK_DIR/paradedb"
+  apt-get install -y --no-install-recommends build-essential git clang libclang-dev pkg-config libssl-dev "postgresql-server-dev-$POSTGRES_MAJOR"
+  install_rust_toolchain
+  cargo install --locked cargo-pgrx --version 0.18.1
+  mkdir -p "$source_dir"
+  curl -fsSL "https://github.com/paradedb/paradedb/archive/refs/tags/v${PG_SEARCH_VERSION}.tar.gz" | tar -xz -C "$source_dir" --strip-components=1
+  (
+    cd "$source_dir"
+    cargo pgrx install --package pg_search --release --pg-config "/usr/lib/postgresql/$POSTGRES_MAJOR/bin/pg_config"
+  )
+  cp "/usr/lib/postgresql/$POSTGRES_MAJOR/lib/pg_search.so" "$EXT_LIB/"
+  cp "/usr/share/postgresql/$POSTGRES_MAJOR/extension"/pg_search* "$EXT_SHARE/"
+  cp -a "$source_dir/LICENSE" "$ROOT/LICENSES/pg_search-license" 2>/dev/null || true
+}
+
+install_pg_search() {
+  if pg_search_deb_available; then
+    install_pg_search_from_deb
+  else
+    install_pg_search_from_source
+  fi
+}
+
+main() {
+  if [[ "$(uname -s)" != "Linux" ]]; then
+    echo "this script must run on Linux" >&2
+    exit 1
+  fi
+
+  if [[ "$(id -u)" -ne 0 ]]; then
+    echo "this script must run as root inside a disposable build container" >&2
+    exit 1
+  fi
+
+  case "$(dpkg --print-architecture)" in
+    amd64) GOARCH="amd64"; PARADE_ARCH="amd64" ;;
+    arm64) GOARCH="arm64"; PARADE_ARCH="arm64" ;;
+    *) echo "unsupported Debian architecture: $(dpkg --print-architecture)" >&2; exit 1 ;;
+  esac
+
+  case "$DISTRO" in
+    bookworm|jammy|noble|resolute|trixie) ;;
+    *) echo "unsupported distro: $DISTRO" >&2; exit 1 ;;
+  esac
+
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y --no-install-recommends ca-certificates curl gnupg lsb-release patchelf zstd file xz-utils
+  install -d /usr/share/postgresql-common/pgdg
+  curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+  echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${DISTRO}-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+  apt-get update
+  apt-get install -y --no-install-recommends "postgresql-$POSTGRES_MAJOR" "postgresql-client-$POSTGRES_MAJOR" "postgresql-$POSTGRES_MAJOR-pgvector"
 
 mkdir -p "$PG_BIN" "$PG_LIB" "$PG_SHARE" "$EXT_LIB" "$EXT_SHARE" "$RUNTIME_LIB" "$ROOT/LICENSES" "$OUT_DIR"
 cp -a "/usr/lib/postgresql/$POSTGRES_MAJOR/bin/." "$PG_BIN/"
@@ -63,13 +118,7 @@ cp -a /usr/share/doc/postgresql-common/copyright "$ROOT/LICENSES/postgresql-comm
 cp -a "/usr/share/doc/postgresql-$POSTGRES_MAJOR/copyright" "$ROOT/LICENSES/postgresql-copyright" 2>/dev/null || true
 cp -a "/usr/share/doc/postgresql-$POSTGRES_MAJOR-pgvector/copyright" "$ROOT/LICENSES/pgvector-copyright" 2>/dev/null || true
 
-PG_SEARCH_DEB="postgresql-${POSTGRES_MAJOR}-pg-search_${PG_SEARCH_VERSION}-1PARADEDB-${DISTRO}_${PARADE_ARCH}.deb"
-PG_SEARCH_URL="https://github.com/paradedb/paradedb/releases/download/v${PG_SEARCH_VERSION}/${PG_SEARCH_DEB}"
-curl -fsSLo "$WORK_DIR/$PG_SEARCH_DEB" "$PG_SEARCH_URL"
-dpkg-deb -x "$WORK_DIR/$PG_SEARCH_DEB" "$WORK_DIR/pg_search"
-cp "$WORK_DIR/pg_search/usr/lib/postgresql/$POSTGRES_MAJOR/lib/pg_search.so" "$EXT_LIB/"
-cp "$WORK_DIR/pg_search/usr/share/postgresql/$POSTGRES_MAJOR/extension"/pg_search* "$EXT_SHARE/"
-cp -a "$WORK_DIR/pg_search/usr/share/doc"/*/copyright "$ROOT/LICENSES/pg_search-copyright" 2>/dev/null || true
+install_pg_search
 
 cp "$PG_LIB/vector.so" "$EXT_LIB/"
 cp "$PG_SHARE/extension"/vector* "$EXT_SHARE/"
@@ -163,3 +212,8 @@ tar --zstd -cf "$OUT_DIR/$ARCHIVE" -C "$ROOT" postgres extensions LICENSES manif
   sha256sum "$ARCHIVE" > "$ARCHIVE.sha256"
 )
 echo "$OUT_DIR/$ARCHIVE"
+}
+
+if [[ "${STELLA_PG_RUNTIME_SOURCE_ONLY:-0}" != "1" ]]; then
+  main "$@"
+fi
