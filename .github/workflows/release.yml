@@ -41,12 +41,28 @@ jobs:
             image: debian:bookworm
             arch: arm64
             runner: ubuntu-24.04-arm
+          - distro: jammy
+            image: ubuntu:jammy
+            arch: amd64
+            runner: ubuntu-24.04
+          - distro: jammy
+            image: ubuntu:jammy
+            arch: arm64
+            runner: ubuntu-24.04-arm
           - distro: noble
             image: ubuntu:noble
             arch: amd64
             runner: ubuntu-24.04
           - distro: noble
             image: ubuntu:noble
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - distro: resolute
+            image: ubuntu:resolute
+            arch: amd64
+            runner: ubuntu-24.04
+          - distro: resolute
+            image: ubuntu:resolute
             arch: arm64
             runner: ubuntu-24.04-arm
           - distro: trixie

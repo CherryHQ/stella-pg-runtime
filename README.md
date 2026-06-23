@@ -9,14 +9,18 @@ This repository builds and publishes per-platform PostgreSQL runtime archives th
 Current target stack:
 
 - macOS: PostgreSQL 18.4 from Postgres.app 2.9.5, pgvector 0.8.2 from Postgres.app, pg_search 0.24.1 from ParadeDB `.pkg`
-- Linux deb: PostgreSQL 18.4 and pgvector 0.8.2 from PGDG packages, pg_search 0.24.1 from ParadeDB `.deb`
+- Linux deb: PostgreSQL 18.4 and pgvector 0.8.2 from PGDG packages, pg_search 0.24.1 from ParadeDB `.deb` when available or from the ParadeDB source tag when no matching `.deb` exists
 
 Published Linux variants target Debian/Ubuntu glibc systems:
 
 - `linux-amd64-bookworm`
 - `linux-arm64-bookworm`
+- `linux-amd64-jammy`
+- `linux-arm64-jammy`
 - `linux-amd64-noble`
 - `linux-arm64-noble`
+- `linux-amd64-resolute`
+- `linux-arm64-resolute`
 - `linux-amd64-trixie`
 - `linux-arm64-trixie`
 
