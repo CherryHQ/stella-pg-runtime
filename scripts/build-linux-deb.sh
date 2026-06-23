@@ -33,11 +33,7 @@ pg_search_deb_url() {
   printf 'https://github.com/paradedb/paradedb/releases/download/v%s/%s' "$PG_SEARCH_VERSION" "$(pg_search_deb_name)"
 }
 
-pg_search_deb_available() {
-  curl -fsSIL -o /dev/null "$(pg_search_deb_url)"
-}
-
-install_pg_search_from_deb() {
+install_pg_search() {
   local deb
   deb="$(pg_search_deb_name)"
   curl -fsSLo "$WORK_DIR/$deb" "$(pg_search_deb_url)"
@@ -45,38 +41,6 @@ install_pg_search_from_deb() {
   cp "$WORK_DIR/pg_search/usr/lib/postgresql/$POSTGRES_MAJOR/lib/pg_search.so" "$EXT_LIB/"
   cp "$WORK_DIR/pg_search/usr/share/postgresql/$POSTGRES_MAJOR/extension"/pg_search* "$EXT_SHARE/"
   cp -a "$WORK_DIR/pg_search/usr/share/doc"/*/copyright "$ROOT/LICENSES/pg_search-copyright" 2>/dev/null || true
-}
-
-install_rust_toolchain() {
-  export PATH="${CARGO_HOME:-/root/.cargo}/bin:$PATH"
-  if command -v cargo >/dev/null 2>&1; then
-    return
-  fi
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-}
-
-install_pg_search_from_source() {
-  local source_dir="$WORK_DIR/paradedb"
-  apt-get install -y --no-install-recommends build-essential git clang libclang-dev pkg-config libssl-dev "postgresql-server-dev-$POSTGRES_MAJOR"
-  install_rust_toolchain
-  cargo install --locked cargo-pgrx --version 0.18.1
-  mkdir -p "$source_dir"
-  curl -fsSL "https://github.com/paradedb/paradedb/archive/refs/tags/v${PG_SEARCH_VERSION}.tar.gz" | tar -xz -C "$source_dir" --strip-components=1
-  (
-    cd "$source_dir"
-    cargo pgrx install --package pg_search --release --pg-config "/usr/lib/postgresql/$POSTGRES_MAJOR/bin/pg_config"
-  )
-  cp "/usr/lib/postgresql/$POSTGRES_MAJOR/lib/pg_search.so" "$EXT_LIB/"
-  cp "/usr/share/postgresql/$POSTGRES_MAJOR/extension"/pg_search* "$EXT_SHARE/"
-  cp -a "$source_dir/LICENSE" "$ROOT/LICENSES/pg_search-license" 2>/dev/null || true
-}
-
-install_pg_search() {
-  if pg_search_deb_available; then
-    install_pg_search_from_deb
-  else
-    install_pg_search_from_source
-  fi
 }
 
 main() {
@@ -97,8 +61,8 @@ main() {
   esac
 
   case "$DISTRO" in
-    bookworm|jammy|noble|resolute|trixie) ;;
-    *) echo "unsupported distro: $DISTRO" >&2; exit 1 ;;
+    bookworm|noble|trixie) ;;
+    *) echo "unsupported distro: $DISTRO; ParadeDB publishes pg_search debs only for bookworm, noble, and trixie" >&2; exit 1 ;;
   esac
 
   export DEBIAN_FRONTEND=noninteractive
